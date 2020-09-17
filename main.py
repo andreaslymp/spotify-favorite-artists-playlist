@@ -1,6 +1,8 @@
 import requests
 from flask import Flask, request, redirect
+import click
 from urllib.parse import urlencode
+from datetime import date
 from spotify_client import SpotifyClient
 
 # Authorization guide:
@@ -30,6 +32,24 @@ auth_query_parameters = {
 }
 
 
+# User's preferences
+def get_preferences():
+    artists_limit = click.prompt('\nEnter the max. number of your top artists for your playlist (1-50) ',
+                                 type=click.IntRange(1, 50), default=20)
+    choices = {'short-term', 'medium-term', 'long-term'}
+    time_range = click.prompt('\nSpotify will look for your top artists over a specified time range:\n'
+                              '\tlong-term: several years of data and including all new data as it becomes available\n'
+                              '\tmedium-term: approximately last 6 months\n'
+                              '\tshort-term: approximately last 4 weeks\n'
+                              'Enter your time range ',
+                              type=click.Choice(choices, case_sensitive=False), default='medium-term').replace("-", "_")
+    tracks_limit = click.prompt('\nEnter the max. number of tracks per artist for your playlist (1-10) ',
+                                type=click.IntRange(1, 10), default=10)
+    playlist_name = click.prompt('\nEnter the name of your new playlist ',
+                                 default="Favorite Artists {}".format(date.today().strftime("%d/%m/%Y")))
+    return artists_limit, time_range, tracks_limit, playlist_name
+
+
 app = Flask(__name__)
 
 
@@ -54,8 +74,10 @@ def callback():
     response_json = response.json()
     access_token = response_json["access_token"]
 
+    artists_limits, time_range, tracks_limit, playlist_name = get_preferences()
+
     # Access the Spotify API
-    spotify_client = SpotifyClient(access_token)
+    spotify_client = SpotifyClient(access_token, artists_limits, time_range, tracks_limit, playlist_name)
     spotify_client.add_tracks_to_playlist()
     print("Your new playlist is ready, enjoy!")
     return redirect("https://open.spotify.com/collection/playlists")

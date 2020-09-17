@@ -1,7 +1,6 @@
 import requests
 import json
 import random
-from datetime import date
 
 # Web API Reference:
 # https://developer.spotify.com/documentation/web-api/reference/
@@ -13,16 +12,17 @@ spotify_api_url = f"{spotify_api_base_url}/{api_version}"
 
 
 class SpotifyClient(object):
-    def __init__(self, access_token):
+    def __init__(self, access_token, artists_limit, time_range, tracks_limit, playlist_name):
         self.access_token = access_token
+        self.artists_limit = artists_limit
+        self.time_range = time_range
+        self.tracks_limit = tracks_limit
+        self.playlist_name = playlist_name
 
     def get_top_artists(self):
         # Personalization Endpoint - GET https://api.spotify.com/v1/me/top/{type} - Get a User's Top Artists and Tracks.
-        # limit=10 (min: 1, max:50), in order to create a playlist with 100 tracks (max. number per request).
-        # time_range=short_term (affinities are computed over the last 4 weeks), other options for time_range are:
-        # medium_term (last 6 months), long_term (several years, including all new data as it becomes available).
         print("Getting user's top artists...")
-        endpoint = f"{spotify_api_url}/me/top/artists?time_range=short_term&limit=10"
+        endpoint = f"{spotify_api_url}/me/top/artists?time_range={self.time_range}&limit={self.artists_limit}"
         headers = {"Authorization": f"Bearer {self.access_token}"}
         response = requests.get(endpoint, headers=headers)
         artists_json = response.json()
@@ -33,7 +33,6 @@ class SpotifyClient(object):
 
     def get_top_tracks(self):
         # Artists Endpoint - GET https://api.spotify.com/v1/artists/{id}/top-tracks - Get an Artist's Top Tracks.
-        # Up to 10 tracks can be obtained for an artist.
         artists = self.get_top_artists()
         tracks = list()
         print("Getting top tracks...")
@@ -42,8 +41,12 @@ class SpotifyClient(object):
             headers = {"Authorization": f"Bearer {self.access_token}"}
             response = requests.get(endpoint, headers=headers)
             tracks_json = response.json()
+            counter = 0
             for track in tracks_json["tracks"]:
                 tracks.append(track["uri"])
+                counter += 1
+                if counter == self.tracks_limit:
+                    break
         random.shuffle(tracks)
         return tracks
 
@@ -57,16 +60,14 @@ class SpotifyClient(object):
 
     def create_playlist(self):
         # Playlists Endpoint - POST https://api.spotify.com/v1/users/{user_id}/playlists - Create a Playlist.
-        # A maximum of 100 tracks can be added in one request.
         user = self.get_user()
-        today = date.today().strftime("%d/%m/%Y")
         print("Creating a playlist...")
         endpoint = f"{spotify_api_url}/users/{user}/playlists"
         headers = {"Authorization": f"Bearer {self.access_token}",
                    "Content-Type": "application/json"}
         data = json.dumps({
-            "name": f"Favourite Artists {today}",
-            "description": "Top songs of my favourite artists!",
+            "name": self.playlist_name,
+            "description": "Top songs of my favorite artists!",
             "public": False})
         response = requests.post(endpoint, headers=headers, data=data)
         return response.json()["id"]
@@ -79,6 +80,7 @@ class SpotifyClient(object):
         endpoint = f"{spotify_api_url}/playlists/{playlist}/tracks"
         headers = {"Authorization": f"Bearer {self.access_token}",
                    "Content-Type": "application/json"}
-        data = json.dumps({"uris": tracks})
-        requests.post(endpoint, headers=headers, data=data)
+        for i in range(0, len(tracks), 100):
+            data = json.dumps({"uris": tracks[i: i+100]})
+            requests.post(endpoint, headers=headers, data=data)
         return
